@@ -1,5 +1,5 @@
 import Logo from '../logos';
-import { altContentMediaQuery, primaryContentMediaQuery } from './mediaQueries';
+import { altContentMediaQuery, primaryContentMediaQuery, textWrap } from './mediaQueries';
 import { textLogoMutations, flexLogoMutations } from './common';
 
 export default {
@@ -8,7 +8,7 @@ export default {
             'default',
             ({ textSize }) => ({
                 logo: Logo.SINGLE_LINE.COLOR,
-                messageWidth: [textSize * 11, textSize * 18],
+                messageWidth: [textSize * 12, 1000],
                 headline: {
                     tag: 'small',
                     br: ['/mo.']
@@ -43,7 +43,6 @@ export default {
         [
             'logo.type:primary && logo.position:right',
             ({ textSize }) => ({
-                messageWidth: [textSize * 10, 1000],
                 styles: [
                     `
                     .message__logo-container { width: ${textSize * 9}px }
@@ -56,9 +55,14 @@ export default {
         [
             'logo.type:inline',
             ({ textSize }) => ({
-                styles: [`.message__logo { width: ${textSize * 7}px }`],
+                styles: [
+                    `
+                    @media (max-width: ${textSize * 16}px) {
+                        .message__logo-container { display: block; }
+                    }
+                    .message__logo { width: ${textSize * 7}px }`
+                ],
                 logo: Logo.SINGLE_LINE_NO_PP.COLOR,
-                messageWidth: [textSize * 19, 1000],
                 headline: {
                     replace: [['APR.', 'APR']],
                     br: ['APR']
@@ -68,8 +72,14 @@ export default {
         [
             'logo.type:none',
             ({ textSize }) => ({
+                styles: [
+                    `
+                    @media (max-width: ${textSize * 15}px) {
+                        .message__disclaimer { display: block; }
+                    }
+                    `
+                ],
                 logo: false,
-                messageWidth: [textSize * 17, 1000],
                 headline: {
                     replace: [['APR.', 'APR']],
                     br: ['APR']
@@ -79,8 +89,10 @@ export default {
         [
             'logo.type:alternative',
             ({ textSize }) => ({
-                styles: [`.message__logo-container { width: ${textSize * 5}px }`],
-                messageWidth: false,
+                styles: [
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 27, textSize, 'US')
+                ],
                 logo: Logo.SINGLE_LINE_NO_PAYPAL.COLOR
             })
         ],
@@ -95,7 +107,8 @@ export default {
             ({ textSize }) => ({
                 styles: [
                     altContentMediaQuery(textSize * 29.1),
-                    `.message__logo-container { width: ${textSize * 5}px }`
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 27, textSize, 'US')
                 ],
                 logo: Logo.SINGLE_LINE_NO_PAYPAL.COLOR
             })

@@ -3,7 +3,7 @@ import objectEntries from 'core-js-pure/stable/object/entries';
 import { h } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 
-import { request, getActiveTags } from '../../utils';
+import { request, getActiveTags, ppDebug, getOrCreateStorageID } from '../../utils';
 import { useXProps, useServerData, useDidUpdateEffect, useDidUpdateLayoutEffect } from './lib';
 
 const Message = () => {
@@ -16,6 +16,9 @@ const Message = () => {
         payerId,
         clientId,
         merchantId,
+        version,
+        stageTag,
+        env,
         onClick,
         onReady,
         onHover,
@@ -46,7 +49,12 @@ const Message = () => {
 
     useLayoutEffect(() => {
         if (typeof onReady === 'function') {
-            onReady({ meta, activeTags: getActiveTags(buttonRef.current) });
+            onReady({
+                meta,
+                activeTags: getActiveTags(buttonRef.current),
+                // Utility will create iframe deviceID if it doesn't exist.
+                deviceID: getOrCreateStorageID()
+            });
         }
     }, [meta.messageRequestId]);
 
@@ -74,7 +82,10 @@ const Message = () => {
             credit_type: offer,
             payer_id: payerId,
             client_id: clientId,
-            merchant_id: merchantId
+            merchant_id: merchantId,
+            version,
+            stageTag,
+            env
         })
             .filter(([, val]) => Boolean(val))
             .reduce(
@@ -83,6 +94,8 @@ const Message = () => {
                 ''
             )
             .slice(1);
+
+        ppDebug('Updating message with new props...', { inZoid: true });
 
         request('GET', `${window.location.origin}/credit-presentment/renderMessage?${query}`).then(({ data }) => {
             setServerData({
@@ -109,7 +122,7 @@ const Message = () => {
                 padding: 0,
                 border: 'none',
                 outline: 'none',
-                textAlign: 'left',
+                textAlign: style?.text?.align || 'left',
                 fontFamily: 'inherit',
                 fontSize: 'inherit'
             }}

@@ -1,11 +1,25 @@
 import arrayFind from 'core-js-pure/stable/array/find';
 import arrayFrom from 'core-js-pure/stable/array/from';
 import arrayFlatMap from 'core-js-pure/stable/array/flat-map';
+import arrayIncludes from 'core-js-pure/stable/array/includes';
 import stringStartsWith from 'core-js-pure/stable/string/starts-with';
-import { ZalgoPromise } from 'zalgo-promise';
+import { ZalgoPromise } from 'zalgo-promise/src';
 
 import { curry } from './functional';
 import { objectMerge, flattenedToObject } from './objects';
+import { ppDebug } from './debug';
+
+/**
+ * Check to see if the message is entirely offscreen by the top/right/bottom/left, and return if any are true.
+ * @param {HTMLElement} el Element to check.
+ * @returns boolean
+ */
+export const elementIsOffscreen = el => {
+    // Get the current coordinates of the message.
+    const { bottom, left, right, top } = el.getBoundingClientRect();
+
+    return !!(left >= window.innerWidth || right <= 0 || bottom <= 0 || top >= window.innerHeight);
+};
 
 export const getWindowFromElement = node => node?.ownerDocument?.defaultView;
 
@@ -37,15 +51,42 @@ export function isElement(el) {
 export function getInlineOptions(container) {
     // Allows for data attributes dependent on camel casing to function properly.
     const attributeNameOverride = {
-        'data-pp-buyercountry': 'data-pp-buyerCountry'
+        buyercountry: 'buyerCountry',
+        merchantid: 'merchantId',
+        fontfamily: 'fontFamily',
+        fontsource: 'fontSource',
+        onclick: 'onClick',
+        onapply: 'onApply',
+        onrender: 'onRender',
+        'style-text-fontfamily': 'style-text-fontFamily',
+        'style-text-fontsource': 'style-text-fontSource'
+    };
+
+    const inlineEventHandlers = ['onclick', 'onapply', 'onrender'];
+
+    const getOptionValue = (name, value) => {
+        if (stringStartsWith(value, '[')) {
+            try {
+                return flattenedToObject(name, JSON.parse(value.replace(/'/g, '"')));
+            } catch (err) {} // eslint-disable-line no-empty
+        }
+        return flattenedToObject(name, value);
     };
 
     const dataOptions = arrayFrom(container.attributes)
         .filter(({ nodeName }) => stringStartsWith(nodeName, 'data-pp-'))
         .reduce((accumulator, { nodeName, nodeValue }) => {
             if (nodeValue) {
-                if (attributeNameOverride[nodeName]) nodeName = attributeNameOverride[nodeName]; // eslint-disable-line no-param-reassign
-                return objectMerge(accumulator, flattenedToObject(nodeName.replace('data-pp-', ''), nodeValue));
+                const attributeName = nodeName.replace('data-pp-', '');
+                const value = arrayIncludes(inlineEventHandlers, attributeName)
+                    ? // eslint-disable-next-line no-new-func
+                      new Function(nodeValue)
+                    : nodeValue;
+
+                return objectMerge(
+                    accumulator,
+                    getOptionValue(attributeNameOverride[attributeName] ?? attributeName, value)
+                );
             }
 
             return accumulator;
@@ -259,11 +300,22 @@ export function getAllBySelector(selector) {
 }
 
 export const elementContains = (parentEl, childEl) => {
-    if (parentEl?.nodeType !== Node.ELEMENT_NODE || childEl?.nodeType !== Node.ELEMENT_NODE) {
+    if (
+        (parentEl?.nodeType !== Node.ELEMENT_NODE && !(parentEl instanceof Window)) ||
+        childEl?.nodeType !== Node.ELEMENT_NODE
+    ) {
         return false;
     }
 
-    const parentBounds = parentEl.getBoundingClientRect();
+    const parentBounds =
+        parentEl instanceof Window
+            ? {
+                  top: 0,
+                  left: 0,
+                  bottom: parentEl.innerHeight,
+                  right: parentEl.innerWidth
+              }
+            : parentEl.getBoundingClientRect();
     const childBounds = childEl.getBoundingClientRect();
 
     return (
@@ -275,7 +327,7 @@ export const elementContains = (parentEl, childEl) => {
 };
 
 export const getRoot = baseElement => {
-    const { innerHeight } = getWindowFromElement(baseElement);
+    const elementWindow = getWindowFromElement(baseElement);
 
     const domPath = [];
     {
@@ -298,7 +350,7 @@ export const getRoot = baseElement => {
             // window.innerHeight has a variable value on mobile based on the URL bar so
             // we are looking for the element that is larger than the window
             // TODO: This could potentially provide a false positive if a merchant is using height 100vh
-            height > innerHeight ||
+            height > elementWindow.innerHeight ||
             // Ensure that the selected root is the larger of the parent
             // and contains the child otherwise there may not be a proper page wrapper
             // e.g. https://www.acwholesalers.com
@@ -306,5 +358,9 @@ export const getRoot = baseElement => {
         );
     });
 
-    return root;
+    // If the root element is entirely within the viewport then return undefined
+    // so that the viewport is used as the root. This helps with position fixed
+    // containers that may have content outside of the root element.
+    ppDebug('Root:', { debugObj: root || 'undefined. Viewport is used as the root.' });
+    return elementContains(elementWindow, root) ? undefined : root;
 };

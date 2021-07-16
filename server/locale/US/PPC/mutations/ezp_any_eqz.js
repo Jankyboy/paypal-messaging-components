@@ -1,5 +1,5 @@
 import Logo from '../logos';
-import { altContentMediaQuery, primaryContentMediaQuery } from './mediaQueries';
+import { altContentMediaQuery, primaryContentMediaQuery, textWrap } from './mediaQueries';
 import { textLogoMutations, flexLogoMutations } from './common';
 
 const defaultTextStyles = [
@@ -16,15 +16,16 @@ export default {
     'layout:text': [
         [
             'default',
-            {
+            ({ textSize }) => ({
                 styles: defaultTextStyles,
                 logo: Logo.SINGLE_LINE.COLOR,
+                messageWidth: [textSize * 12, 1000],
                 headline: {
                     tag: 'small',
                     br: ['APR']
                 },
                 disclaimer: 'xsmall.2'
-            }
+            })
         ],
         [
             'logo.type:primary',
@@ -39,7 +40,6 @@ export default {
         [
             'logo.type:primary && logo.position:left',
             ({ textSize }) => ({
-                messageWidth: textSize * 16,
                 logo: [Logo.SINGLE_LINE_NO_PAYPAL.COLOR, Logo.SINGLE_LINE.COLOR],
                 styles: [
                     ...defaultTextStyles,
@@ -60,7 +60,6 @@ export default {
         [
             'logo.type:primary && logo.position:right',
             ({ textSize }) => ({
-                messageWidth: [textSize * 10, 1000],
                 styles: [
                     ...defaultTextStyles,
                     `
@@ -82,8 +81,11 @@ export default {
         [
             'logo.type:alternative',
             ({ textSize }) => ({
-                styles: [...defaultTextStyles, `.message__logo-container { width: ${textSize * 5}px }`],
-                messageWidth: [textSize * 15, 1000],
+                styles: [
+                    ...defaultTextStyles,
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 33, textSize, 'US')
+                ],
                 logo: Logo.SINGLE_LINE_NO_PAYPAL.COLOR,
                 headline: {
                     replace: [['APR', 'APR.']],
@@ -97,8 +99,15 @@ export default {
                 styles: [
                     ...defaultTextStyles,
                     altContentMediaQuery(textSize * 35.8),
-                    `.message__logo-container { width: ${textSize * 5}px }`
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 33, textSize, 'US')
                 ]
+            })
+        ],
+        [
+            'logo.type:alternative && logo.position:top',
+            ({ textSize }) => ({
+                styles: [...defaultTextStyles, `.message__logo-container { width: ${textSize * 5}px }`]
             })
         ],
         [
@@ -108,9 +117,19 @@ export default {
             })
         ],
         [
+            'logo.type:primary && text.color:white',
+            ({ textSize }) => ({
+                styles: [...whiteStyles, `.message__logo-container { width: ${textSize * 9}px }`]
+            })
+        ],
+        [
             'logo.type:alternative && text.color:white',
             ({ textSize }) => ({
-                styles: [...whiteStyles, `.message__logo-container { width: ${textSize * 5}px }`]
+                styles: [
+                    ...whiteStyles,
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 33, textSize, 'US')
+                ]
             })
         ],
         [

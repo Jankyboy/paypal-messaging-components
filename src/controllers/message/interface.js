@@ -4,22 +4,26 @@ import { ZalgoPromise } from 'zalgo-promise/src';
 import {
     objectMerge,
     getInlineOptions,
-    globalState,
+    getGlobalState,
     getAllBySelector,
-    attributeObserver,
+    getAttributeObserver,
     nextIndex,
     logger,
     getCurrentTime,
+    addPerformanceMeasure,
     globalEvent
 } from '../../utils';
 
-import { Message } from '../../zoid/message';
+import { getMessageComponent } from '../../zoid/message';
 import { Modal } from '../modal';
+import { ppDebug } from '../../utils/debug';
 
 export default (options = {}) => ({
     render: (selector = '[data-pp-message]') => {
+        addPerformanceMeasure('firstRenderDelay');
+
         const renderStart = getCurrentTime();
-        const { messagesMap } = globalState;
+        const { messagesMap } = getGlobalState();
         const containers = getAllBySelector(selector);
 
         if (containers.length === 0) {
@@ -55,7 +59,7 @@ export default (options = {}) => ({
         return ZalgoPromise.all(
             validContainers.map(container => {
                 const merchantOptions = objectMerge(
-                    globalState.config,
+                    getGlobalState().config,
                     objectMerge(options, getInlineOptions(container))
                 );
 
@@ -73,6 +77,7 @@ export default (options = {}) => ({
                     style,
                     offer,
                     buyerCountry,
+                    ignoreCache,
                     onClick,
                     onRender,
                     onApply
@@ -81,7 +86,6 @@ export default (options = {}) => ({
                 // Explicitly select props to pass in to avoid unintentionally sending
                 // in props meant for only either the message or modal (e.g. onClick)
                 const commonProps = {
-                    index,
                     account,
                     merchantId,
                     currency,
@@ -94,10 +98,12 @@ export default (options = {}) => ({
                 };
                 const messageProps = {
                     ...commonProps,
+                    index,
                     placement,
                     style,
                     offer,
                     onClick,
+                    ignoreCache,
                     onReady: (...args) => {
                         if (typeof onRender === 'function') {
                             onRender(...args);
@@ -114,14 +120,33 @@ export default (options = {}) => ({
                 }
 
                 if (!messagesMap.has(container)) {
-                    const { render, state, updateProps, clone } = Message(messageProps);
+                    const { render, state, updateProps, clone } = getMessageComponent()(messageProps);
 
                     state.renderStart = renderStart;
                     state.style = messageProps.style;
 
                     messagesMap.set(container, { render, updateProps, state, clone });
 
-                    attributeObserver.observe(container, { attributes: true });
+                    getAttributeObserver().observe(container, { attributes: true });
+
+                    ppDebug(
+                        `{
+                    clientID: ${account},
+                    merchantID: ${merchantId},
+                    offer: ${offer},
+                    currency: ${currency},
+                    ignoreCache: ${ignoreCache},
+            
+                    index: data-pp-id="${index}"
+                    style: ${JSON.stringify(style)},
+                    amount: ${amount},
+                    buyerCountry: ${buyerCountry},
+                    placement: ${placement},
+            
+                    renderStart: ${new Date(renderStart).toLocaleString()},
+                    renderMessageTime: ${new Date().toLocaleString()}
+                    }`
+                    );
 
                     return render(container).then(() => globalEvent.trigger('render'));
                 }

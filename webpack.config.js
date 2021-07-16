@@ -1,14 +1,16 @@
 const { getWebpackConfig } = require('grumbler-scripts/config/webpack.config');
 
 const globals = require('./globals');
+const { localeOptions } = require('./locales');
 
 module.exports = (env = {}) => {
     // messaging.js
     const MESSAGES_CONFIG = getWebpackConfig({
         entry: './src/index.js',
         filename: 'messaging.js',
-        modulename: ['paypal', 'Messages'],
-        libraryTarget: env.demo ? 'umd' : 'window',
+        // Need to explicitly disable this feature. The library has it's own
+        // window bootstrap mechanism to attach multiple "exports" onto window.paypal
+        libraryTarget: false,
         web: true,
         minify: true,
         debug: false,
@@ -19,7 +21,6 @@ module.exports = (env = {}) => {
             TARGET: 'standalone'
         })
     });
-    MESSAGES_CONFIG.output.libraryExport = 'Messages';
 
     // zoid components
     const COMPONENTS_CONFIG = getWebpackConfig({
@@ -37,7 +38,7 @@ module.exports = (env = {}) => {
         })
     });
 
-    COMPONENTS_CONFIG.entry = ['US', 'US-EZP', 'DE', 'GB'].reduce(
+    COMPONENTS_CONFIG.entry = [...localeOptions, 'US-EZP', 'DE-GPL'].reduce(
         (accumulator, locale) => ({
             ...accumulator,
             [`smart-credit-modal-${locale}`]: `./src/components/modal/content/${locale}/index.js`
@@ -51,22 +52,6 @@ module.exports = (env = {}) => {
         chunks: 'all',
         name: 'smart-credit-common'
     };
-
-    // TODO: Remove this after the ramp
-    const MODAL_CONFIG = getWebpackConfig({
-        entry: './src/old/modal/index.js',
-        filename: 'smart-credit-modal.js',
-        libraryTarget: 'window',
-        modulename: 'crc',
-        web: true,
-        minify: true,
-        debug: false,
-        env: env.NODE_ENV,
-        vars: globals({
-            ...env,
-            TARGET: 'modal'
-        })
-    });
 
     const RENDERING_CONFIG = getWebpackConfig({
         entry: ['./server/index.js'],
@@ -84,7 +69,7 @@ module.exports = (env = {}) => {
 
     const modules = {
         library: [MESSAGES_CONFIG],
-        components: [COMPONENTS_CONFIG, MODAL_CONFIG],
+        components: [COMPONENTS_CONFIG],
         render: [RENDERING_CONFIG]
     };
 

@@ -6,6 +6,9 @@ import { PORT, VARIANT } from '../../server/constants';
 import { populateTemplate, localizeCurrency } from './miscellaneous';
 import { getTerms } from './mockTerms';
 
+// set this environment variable to simulate the time for the request to be answered
+const requestDelay = process.env.REQUEST_DELAY ?? 500;
+
 const devAccountMap = {
     DEV00000000NI: ['US', ['ni'], 'ni'],
     DEV0000000NIQ: ['US', ['ni'], 'niq'],
@@ -20,6 +23,7 @@ const devAccountMap = {
     DEV0000000GPL: ['US', ['gpl'], 'gpl'],
     DEV000000GPLQ: ['US', ['gpl'], 'gplq'],
     DEV00000GPLNQ: ['US', ['gpl'], 'gplnq'],
+    DEVGPLNQRANGE: ['US', ['gpl'], 'gplnq_range'],
 
     // Multi product modal
     DEV00000NIGPL: ['US', ['gpl', 'ni'], 'gpl'],
@@ -28,9 +32,23 @@ const devAccountMap = {
     DEV0000000IAG: ['DE', ['inst'], 'inst_any_gtz'],
     DEV000000PQAG: ['DE', ['inst'], 'palaq_any_gtz'],
     DEV000000PQAZ: ['DE', ['inst'], 'palaq_any_eqz'],
+    DEV000DEPLEQZ: ['DE', ['gpl'], 'gpl_eqz'],
+    DEV000DEPLGTZ: ['DE', ['gpl'], 'gpl_gtz'],
+    DEV00DEPLQEQZ: ['DE', ['gpl'], 'gplq_eqz'],
+    DEV00DEPLQGTZ: ['DE', ['gpl'], 'gplq_gtz'],
+    DEV0XBDEPLEQZ: ['DE', ['gpl'], 'gpl_eqz-non-de'],
+    DEV0XBDEPLGTZ: ['DE', ['gpl'], 'gpl_gtz-non-de'],
+    DEVXBDEPLQEQZ: ['DE', ['gpl'], 'gplq_eqz-non-de'],
+    DEVXBDEPLQGTZ: ['DE', ['gpl'], 'gplq_gtz-non-de'],
 
     DEV000000GBPL: ['GB', ['gpl'], 'pl'],
-    DEV00000GBPLQ: ['GB', ['gpl'], 'plq']
+    DEV00000GBPLQ: ['GB', ['gpl'], 'plq'],
+
+    DEV000000FRPL: ['FR', ['gpl'], 'gpl'],
+    DEV00000FRPLQ: ['FR', ['gpl'], 'gplq'],
+
+    DEV000000AUPL: ['AU', ['gpl'], 'gpl'],
+    DEV00000AUPLQ: ['AU', ['gpl'], 'gplq']
 };
 
 export default (app, server, compiler) => {
@@ -50,6 +68,8 @@ export default (app, server, compiler) => {
                 formattedPeriodicPayment: toLocaleCurrency(bestOffer.monthly),
                 formattedMonthlyPayment: toLocaleCurrency(bestOffer.monthly),
                 formattedTotalCost: toLocaleCurrency(terms.formattedAmount),
+                formattedMinAmount: toLocaleCurrency(terms.minAmount, 0),
+                formattedMaxAmount: toLocaleCurrency(terms.maxAmount, 0),
                 total_payments: bestOffer.term
             };
 
@@ -64,7 +84,7 @@ export default (app, server, compiler) => {
         return null;
     };
 
-    const createMockZoidMarkup = (component, initializer) => `
+    const createMockZoidMarkup = (component, initializer, scriptUID) => `
         <!DOCTYPE html>
         <head>
             <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -72,9 +92,7 @@ export default (app, server, compiler) => {
         </head>
         <body>
             <script>
-                var interface = (window.top.document.querySelector('script[src*="components"][src*="messages"]')
-                    || window.top.document.querySelector('script[src*="messaging.js"]')).outerHTML;
-
+                var interface = window.top.document.querySelector('script[src*="components"][src*="messages"][data-uid-auto="${scriptUID}"],script[src*="messaging.js"][data-uid-auto="${scriptUID}"]').outerHTML;
                 document.write(interface);
             </script>
             <script src="//localhost.paypal.com:${PORT}/smart-credit-common.js"></script>
@@ -134,7 +152,11 @@ export default (app, server, compiler) => {
                     }
                 }
 
-                const markup = render({ style: validatedStyle, amount, customMarkup }, populatedBanner);
+                const markup = render(
+                    { style: validatedStyle, amount, customMarkup },
+                    populatedBanner,
+                    warnings.push.bind(warnings)
+                );
                 const parentStyles = getParentStyles(validatedStyle);
 
                 return {
@@ -143,11 +165,12 @@ export default (app, server, compiler) => {
                     parentStyles,
                     meta: {
                         ...populatedBanner.meta,
-                        uuid: '928ad66d-81de-440e-8c47-69bb3c3a5623',
+                        displayedMessage: '928ad66d-81de-440e-8c47-69bb3c3a5623',
                         messageRequestId: 'acb0956c-d0a6-4b57-9bc5-c1daaa93d313',
                         trackingDetails: {
                             clickUrl: `//localhost.paypal.com:${PORT}/ptrk/?fdata=null`,
-                            impressionUrl: `//localhost.paypal.com:${PORT}/ptrk/?fdata=null`
+                            impressionUrl: `//localhost.paypal.com:${PORT}/ptrk/?fdata=null`,
+                            payload: {}
                         }
                     }
                 };
@@ -164,12 +187,19 @@ export default (app, server, compiler) => {
     app.post('/credit-presentment/log', (req, res) => res.send(''));
 
     app.get('/credit-presentment/smart/message', async (req, res) => {
+        const { scriptUID } = req.query;
         const props = await getRenderedMessage(req);
 
         if (props) {
             res.set('Cache-Control', 'public, max-age=10');
 
-            res.send(createMockZoidMarkup('message', `<script>crc.setupMessage(${JSON.stringify(props)})</script>`));
+            res.send(
+                createMockZoidMarkup(
+                    'message',
+                    `<script>crc.setupMessage(${JSON.stringify(props)})</script>`,
+                    scriptUID
+                )
+            );
         } else {
             res.status(400).send('');
         }
@@ -180,9 +210,60 @@ export default (app, server, compiler) => {
         const account = clientId || payerId || merchantId;
         const [country, productNames] = devAccountMap[account] ?? ['US', ['ni']];
 
-        const productsJSON = productNames.map(product =>
-            fs.readFileSync(`modals/${country}/${product}.json`, 'utf-8').toString()
-        );
+        const productsJSON = productNames.map(product => {
+            const jsonFile = `modals/${country}/${product}.json`;
+            if (fs.existsSync(jsonFile)) {
+                return fs.readFileSync(jsonFile, 'utf-8').toString();
+            }
+            // eslint-disable-next-line no-console
+            console.warn(`${jsonFile} does not exist`);
+            return `{
+                    "meta": {
+                        "product": "GPL",
+                        "periodicPayment": "{formattedPeriodicPayment}",
+                        "minAmount": "{minAmount}",
+                        "maxAmount": "{maxAmount}",
+                        "qualifying": "{qualifying_offer}",
+                        "amount": "{transaction_amount}",
+                        "variables": {
+                            "transaction_amount": "\${eval(transaction_amount ? transaction_amount : '-')}",
+                            "qualifying_offer": "\${eval(CREDIT_OFFERS_DS.qualifying_offer ? CREDIT_OFFERS_DS.qualifying_offer : 'false')}",
+                            "financing_code": "\${CREDIT_OFFERS_DS.financing_code}",
+                            "formattedPeriodicPayment": "\${CREDIT_OFFERS_DS.formattedPeriodicPayment}",
+                            "total_payments": "\${CREDIT_OFFERS_DS.total_payments}",
+                            "formattedMinAmount": "\${CREDIT_OFFERS_DS.formattedMinAmount}",
+                            "formattedMaxAmount": "\${CREDIT_OFFERS_DS.formattedMaxAmount}",
+                            "formattedTotalCost": "\${CREDIT_OFFERS_DS.formattedTotalCost}",
+                            "minAmount": "\${CREDIT_OFFERS_DS.minAmount}",
+                            "maxAmount": "\${CREDIT_OFFERS_DS.maxAmount}",
+                            "apr": "\${CREDIT_OFFERS_DS.apr}",
+                            "nominal_rate": "\${CREDIT_OFFERS_DS.nominal_rate}"
+                        }
+                    },
+                    "content": {
+                        "headline": {
+                            "singleProduct": "Pay in X"
+                        },
+                        "subHeadline": {
+                            "pay": {
+                                "start": "Make one interest-free payment",
+                                "amount": "of {formattedPeriodicPayment}",
+                                "end": "today, then pay the rest monthly."
+                            },
+                            "available": "Available on purchases from {formattedMinAmount} to {formattedMaxAmount}.",
+                            "apply": "Apply lorem ipsum, dolor sit amet consectetur adipisicing elit. Possimus, enim?."
+                        },
+                        "terms": [
+                            "TERMS AND CONDITIONS.",
+                            "PayPal Pay in X Lorem ipsum dolor sit, amet consectetur adipisicing, elit.",
+                            "Facilis adipisci quidem obcaecati, accusantium voluptatum repudiandae magni dicta officiis est eum!"
+                        ],
+                        "instructions": {
+                            "title": ["Check out securely with", "PayPal", "and choose", "Pay in X"]
+                        }
+                    }
+                }`;
+        });
 
         const terms = getTerms(country, Number(amount));
         const [bestOffer] = terms.offers || [{}];
@@ -194,6 +275,7 @@ export default (app, server, compiler) => {
             minAmount: terms.minAmount,
             maxAmount: terms.maxAmount,
             formattedTransactionAmount: terms.amount ? toLocaleCurrency(terms.amount) : '-',
+            formattedTotalCost: terms.amount ? toLocaleCurrency(terms.amount) : '-',
             qualifying_offer: terms.amount ? 'true' : 'false',
             total_payments: bestOffer.term,
             formattedMinAmount: toLocaleCurrency(terms.minAmount),
@@ -227,38 +309,60 @@ export default (app, server, compiler) => {
 
         const props = {
             terms: getTerms(country, Number(amount)),
-            meta: {
-                csrf: 'csrf'
-            },
             aprEntry: {
                 apr: 25.49,
                 formattedDate: '9/01/2020'
             },
             country,
             products,
-            type: products.slice(-1)[0].meta.product, // TODO: Can be removed after the ramp
-            payerId: account
+            payerId: account,
+            meta: {
+                displayedMessage: 'b0ffd6cc-6887-4855-a5c8-4b17a5efb201',
+                messageRequestId: '9ad74722-d142-4c5a-9b0b-59cd7b079235',
+                trackingDetails: {
+                    clickUrl: `//localhost.paypal.com:${PORT}/ptrk/?fdata=null`,
+                    impressionUrl: `//localhost.paypal.com:${PORT}/ptrk/?fdata=null`,
+                    payload: {}
+                }
+            }
         };
 
         return { props, productNames };
     };
 
-    app.get('/credit-presentment/smart/modal', (req, res) => {
-        const { targetMeta } = req.query;
+    // create the initial modal with content
+    app.get('/credit-presentment/smart/modal', async (req, res) => {
+        const { targetMeta, scriptUID } = req.query;
+
         const { props, productNames } = getModalData(req);
 
-        res.send(
-            createMockZoidMarkup(
-                targetMeta ? 'modal' : `modal-${productNames.includes('ezp_old') ? 'US-EZP' : props.country}`,
-                `<script>crc.setupModal(${JSON.stringify(props)})</script>`
-            )
-        );
+        const component = () => {
+            if (props.country === 'US' && productNames.includes('ezp_old')) {
+                return 'US-EZP';
+            }
+
+            if (props.country === 'DE' && productNames.includes('gpl')) {
+                return 'DE-GPL';
+            }
+
+            return props.country;
+        };
+        setTimeout(() => {
+            res.send(
+                createMockZoidMarkup(
+                    targetMeta ? 'modal' : `modal-${component()}`,
+                    `<script>crc.setupModal(${JSON.stringify(props)})</script>`,
+                    scriptUID
+                )
+            );
+        }, requestDelay);
     });
-    app.get('/credit-presentment/modalContent', (req, res) => {
+
+    app.get('/credit-presentment/modalContent', async (req, res) => {
         const { props: data } = getModalData(req);
         setTimeout(() => {
             res.send(data);
-        }, 1000);
+        }, requestDelay);
     });
 
     app.get('/credit-presentment/renderMessage', async (req, res) => {
@@ -277,14 +381,14 @@ export default (app, server, compiler) => {
 
         setTimeout(() => {
             res.send(getTerms(country, Number(amount)));
-        }, 1000);
+        }, requestDelay);
     });
     app.get('/credit-presentment/calculateTerms', (req, res) => {
         const { country, amount } = req.query;
 
         setTimeout(() => {
             res.send(getTerms(country, Number(amount)));
-        }, 1000);
+        }, requestDelay);
     });
 
     app.get('/credit-presentment/messages', (req, res) => {
@@ -375,4 +479,16 @@ export default (app, server, compiler) => {
 
     app.get('/ptrk', (req, res) => res.send(''));
     app.post('/ppcredit/messagingLogger', (req, res) => res.send(''));
+    // Support versioned URLs
+    app.get('/versioned/:component', (req, res) => {
+        const { component } = req.params;
+        const [, componentName] = component.match(/([\w-]+?)@/);
+
+        return res.redirect(`/${componentName}.js`);
+    });
+    // Mimic sdk path by rewriting /sdk/js to the webpack output file /sdk.js
+    app.use((req, res, next) => {
+        req.url = req.url.replace(/\/sdk\/js/, '/sdk.js');
+        next();
+    });
 };

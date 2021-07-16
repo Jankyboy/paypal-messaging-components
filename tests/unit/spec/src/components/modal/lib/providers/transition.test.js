@@ -8,7 +8,8 @@ const defaultXProps = {
     show: jest.fn().mockResolvedValue(null),
     hide: jest.fn().mockResolvedValue(null),
     onProps: jest.fn(),
-    onClose: jest.fn()
+    onClose: jest.fn(),
+    onShow: jest.fn()
 };
 
 jest.mock('src/components/lib/providers/xprops');
@@ -39,7 +40,11 @@ describe('transition', () => {
 
         await new Promise(resolve => {
             setTimeout(() => {
-                expect(result.current.status).toBe(STATUS.OPENING);
+                expect(defaultXProps.onShow).toHaveBeenCalledTimes(1);
+
+                requestAnimationFrame(() => {
+                    expect(result.current.status).toBe(STATUS.OPENING);
+                });
 
                 setTimeout(() => {
                     expect(result.current.status).toBe(STATUS.OPEN);

@@ -42,7 +42,7 @@ export function xSmallFallback(breakpoint) {
 }
 
 /**
- * Used in US and GB GPL text messages.
+ * Used in GPL text messages.
  * Wraps text under logo for default/primary left and alternative config types.
  */
 export function textWrap(breakpoint, textSize, locale) {
@@ -103,6 +103,15 @@ export function messageLogoWidth(logoContainerWidth, logoWidth, monogramWidth) {
     const messageLogoFirstChild =
         typeof monogramWidth === 'number' ? `.message__logo:first-child { width: ${monogramWidth}px; }` : '';
     return [messageLogoContainer, messageLogo, messageLogoFirstChild].join('');
+}
+
+/**
+ * Add period after formatted min amount and formatted max amount.
+ */
+export function addPeriod() {
+    return `.message__headline > .tag--medium > span > span:nth-child(2)::after {
+        content: '.'
+    }`;
 }
 
 // Sets logo position for GPL 20x1 ratio

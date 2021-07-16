@@ -23,7 +23,10 @@ module.exports = {
         'zoid/src': 'zoid',
         'jsx-pragmatic/src': 'jsx-pragmatic',
         '@paypal/sdk-client/src': '@paypal/sdk-client',
-        'belter/src': 'belter'
+        '@paypal/sdk-constants/src': '@paypal/sdk-constants',
+        '@paypal/sdk-logos/src': '@paypal/sdk-logos',
+        'belter/src': 'belter',
+        'beaver-logger/src': 'beaver-logger'
     },
     collectCoverageFrom: ['./src/**'],
     transform: {
@@ -31,7 +34,7 @@ module.exports = {
         '^.+\\.scss$': '<rootDir>/tests/unit/utils/sassLoader.js',
         '^.+\\.(html|css)$': '<rootDir>/tests/unit/utils/rawLoader.js'
     },
-    setupFilesAfterEnv: ['<rootDir>/tests/unit/utils/setup.js'],
+    setupFilesAfterEnv: ['<rootDir>/tests/unit/utils/setup.js', '<rootDir>/tests/customMatchers.js'],
     // grumbler-scripts includes babel-plugin-istanbul
     coveragePathIgnorePatterns: ['<rootDir>'],
     globals: {
@@ -42,10 +45,6 @@ module.exports = {
                 __TEST__: 'http://localhost.paypal.com:8080'
             },
             __URI__: {
-                __RAMP_EXCLUSION_LIST__: '/upstream/assets/messaging/modal/ramp-exclusion.json',
-                __MESSAGE_A__: '/imadserver/upstream',
-                __MESSAGE_B__: '/credit-presentment/messages',
-                __MESSAGE_B_LEGACY__: '/credit-presentment/messages/legacy',
                 __MESSAGE__: '/credit-presentment/smart/message',
                 __MODAL__: '/credit-presentment/smart/modal',
                 __LOGGER__: '/credit-presentment/log'

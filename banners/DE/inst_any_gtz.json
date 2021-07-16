@@ -1,5 +1,6 @@
 {
     "meta": {
+        "id": "a01da4a0-b762-431a-bab0-5a76f97cfd13",
         "offerCountry": "DE",
         "offerType": "INST:ANY:GTZ",
         "offerTerm": "${CREDIT_OFFERS_DS.total_payments}",

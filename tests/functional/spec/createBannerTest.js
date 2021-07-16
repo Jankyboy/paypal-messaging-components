@@ -1,18 +1,25 @@
 /* istanbul ignore file */
 import { configureToMatchImageSnapshot } from 'jest-image-snapshot';
+import { logScreenshot, logTestName } from './utils/logging';
 import selectors from './utils/selectors';
 
-const isComparingSnapshots = process.env.DIRTY_SNAPSHOTS == 0; // eslint-disable-line eqeqeq
-
-const toMatchImageSnapshot = configureToMatchImageSnapshot({
+const toMatchTextSnapshot = configureToMatchImageSnapshot({
     failureThresholdType: 'percent',
-    failureThreshold: 0.002,
+    failureThreshold: 0.004,
     customDiffConfig: {
         threshold: 0.05
     }
 });
 
-expect.extend({ toMatchImageSnapshot });
+const toMatchFlexSnapshot = configureToMatchImageSnapshot({
+    failureThresholdType: 'percent',
+    failureThreshold: 0.005,
+    customDiffConfig: {
+        threshold: 0.05
+    }
+});
+
+expect.extend({ toMatchTextSnapshot, toMatchFlexSnapshot });
 
 const getConfigStrParts = (obj, keyPrefix = '') => {
     return Object.entries(obj).reduce((accumulator, [key, val]) => {
@@ -40,7 +47,7 @@ const getTestNameParts = (locale, { account, amount, style: { layout, ...style }
 };
 
 // returns height and width of banner in pixels
-const waitForBanner = async ({ testName, timeout }) => {
+const waitForBanner = async ({ testName, timeout, config }) => {
     try {
         const polling = 10;
         const result = await page.waitForFunction(
@@ -55,6 +62,14 @@ const waitForBanner = async ({ testName, timeout }) => {
                 if (iframe) {
                     const iframeBody = iframe.contentWindow.document.body;
                     const banner = iframeBody.querySelector(bannerSelectors.container);
+                    if (config?.style?.text?.align) {
+                        return (
+                            iframeBody?.clientHeight && {
+                                height: iframeBody.clientHeight,
+                                width: iframeBody.clientWidth
+                            }
+                        );
+                    }
                     return banner?.clientHeight && { height: banner.clientHeight, width: banner.clientWidth };
                 }
 
@@ -104,18 +119,14 @@ export default function createBannerTest(locale, testPage = 'banner.html') {
                 console.log(`banner page error for [${testName}]`, error);
             });
 
-            // Outputs current test so CI does not stall
-            if (isComparingSnapshots) {
-                // eslint-disable-next-line no-console
-                console.info(`Running test [${testName}], with viewport ${JSON.stringify(viewport)}`);
-            }
+            logTestName({ testName, viewport });
             await page.setViewport(viewport);
 
             const waitForNavPromise = page.waitForNavigation({ waitUntil: 'networkidle0' });
             await page.goto(`https://localhost.paypal.com:8080/snapshot/${testPage}?config=${JSON.stringify(config)}`);
             await waitForNavPromise;
 
-            const bannerDimensions = await waitForBanner({ testName, timeout: 2 * 1000 });
+            const bannerDimensions = await waitForBanner({ testName, timeout: 2 * 1000, config });
             expect(bannerDimensions.height).toBeGreaterThan(0);
             expect(bannerDimensions.width).toBeGreaterThan(0);
 
@@ -126,9 +137,7 @@ export default function createBannerTest(locale, testPage = 'banner.html') {
             };
             const snapshotDimensions = config?.style?.layout === 'text' ? paddedDimensions : bannerDimensions;
 
-            // eslint-disable-next-line no-console
-            console.log(`Taking screenshot of [${testName}] with dimensions ${JSON.stringify(snapshotDimensions)}`);
-
+            logScreenshot({ name: testName, viewport: snapshotDimensions });
             const image = await page.screenshot(
                 {
                     clip: {
@@ -140,8 +149,9 @@ export default function createBannerTest(locale, testPage = 'banner.html') {
                 3
             );
 
+            const matchFunction = config?.style?.layout === 'text' ? 'toMatchTextSnapshot' : 'toMatchFlexSnapshot';
             const customSnapshotIdentifier = `${testNameParts.pop()}-${viewport.width}`;
-            expect(image).toMatchImageSnapshot({
+            expect(image)[matchFunction]({
                 diffDirection: snapshotDimensions.width > snapshotDimensions.height ? 'vertical' : 'horizontal',
                 customSnapshotsDir: ['./tests/functional/snapshots', ...testNameParts].join('/'),
                 customSnapshotIdentifier

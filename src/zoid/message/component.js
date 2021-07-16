@@ -1,25 +1,32 @@
 import stringStartsWith from 'core-js-pure/stable/string/starts-with';
 import { create } from 'zoid/src';
-import { ZalgoPromise } from 'zalgo-promise';
+import { ZalgoPromise } from 'zalgo-promise/src';
+import { getCurrentScriptUID } from 'belter/src';
 
 import {
     getMeta,
     getEnv,
     getGlobalUrl,
-    getGlobalVariable,
+    createGlobalVariableGetter,
     getLibraryVersion,
     runStats,
     logger,
-    globalState,
-    getCurrentTime
+    getSessionID,
+    getGlobalState,
+    getCurrentTime,
+    writeStorageID,
+    getOrCreateStorageID,
+    getStageTag,
+    ppDebug,
+    isScriptBeingDestroyed
 } from '../../utils';
 import validate from './validation';
 import containerTemplate from './containerTemplate';
 
-export default getGlobalVariable('__paypal_credit_message__', () =>
+export default createGlobalVariableGetter('__paypal_credit_message__', () =>
     create({
         tag: 'paypal-message',
-        url: getGlobalUrl('MESSAGE_B'),
+        url: getGlobalUrl('MESSAGE'),
         // eslint-disable-next-line security/detect-unsafe-regex
         domain: /\.paypal\.com(:\d+)?$/,
         containerTemplate,
@@ -30,6 +37,7 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
         },
         attributes: {
             iframe: {
+                title: 'PayPal Message',
                 scrolling: 'no'
             }
         },
@@ -83,6 +91,12 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                 required: false,
                 value: validate.buyerCountry
             },
+            ignoreCache: {
+                type: 'boolean',
+                queryParam: 'ignore_cache',
+                required: false,
+                value: validate.ignoreCache
+            },
 
             // Callbacks
             onClick: {
@@ -98,15 +112,16 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                         // Avoid spreading message props because both message and modal
                         // zoid components have an onClick prop that functions differently
                         modal.show({
-                            index,
                             account,
                             merchantId,
                             currency,
                             amount,
                             buyerCountry,
                             onApply,
-                            refId: messageRequestId,
                             offer: offerType,
+                            refId: messageRequestId,
+                            refIndex: index,
+                            src: 'message_click',
                             onClose: () => focus()
                         });
 
@@ -115,6 +130,7 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                             et: 'CLICK',
                             event_type: 'MORS'
                         });
+
                         logger.track({
                             index,
                             et: 'CLICK',
@@ -159,17 +175,37 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                 value: ({ props }) => {
                     const { onReady } = props;
 
-                    return ({ meta, activeTags }) => {
+                    return ({ meta, activeTags, deviceID }) => {
                         const { account, merchantId, index, modal, getContainer } = props;
-                        const { messageRequestId, displayedMessage, trackingDetails, offerType } = meta;
+                        const { messageRequestId, trackingDetails, offerType, ppDebugId } = meta;
+                        ppDebug(`Message Correlation ID: ${ppDebugId}`);
 
-                        logger.addMetaBuilder(() => {
+                        // Write deviceID from iframe localStorage to merchant domain localStorage
+                        writeStorageID(deviceID);
+
+                        logger.addMetaBuilder(existingMeta => {
+                            // Remove potential existing meta info
+                            // Necessary because beaver-logger will not override an existing meta key if these values change
+                            // eslint-disable-next-line no-param-reassign
+                            delete existingMeta[index];
+
+                            // Need to capture existing attributes under global before destroying
+                            const { global: existingGlobal = {} } = existingMeta;
+                            // eslint-disable-next-line no-param-reassign
+                            delete existingMeta.global;
+
                             return {
+                                // Need to merge global attribute here due to preserve performance attributes
+                                global: {
+                                    ...existingGlobal,
+                                    deviceID, // deviceID from internal iframe storage
+                                    sessionID: getSessionID() // Session ID from parent local storage
+                                },
                                 [index]: {
+                                    type: 'message',
                                     messageRequestId,
                                     account: merchantId || account,
-                                    displayedMessage,
-                                    ...trackingDetails
+                                    trackingDetails
                                 }
                             };
                         });
@@ -179,10 +215,9 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                             activeTags,
                             index
                         });
-
                         // Set visible to false to prevent this update from popping open the modal
                         // when the user has previously opened the modal
-                        modal.updateProps({ index, offer: offerType, visible: false });
+                        modal.updateProps({ refIndex: index, offer: offerType, visible: false });
                         modal.render('body');
 
                         logger.track({
@@ -232,11 +267,15 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                     // Handle moving the iframe around the DOM
                     return () => {
                         const { getContainer } = props;
-                        const { messagesMap } = globalState;
+                        const { messagesMap } = getGlobalState();
                         const container = getContainer();
                         // Let the cleanup finish before re-rendering
                         ZalgoPromise.delay(0).then(() => {
-                            if (container && container.ownerDocument.body.contains(container)) {
+                            if (
+                                container &&
+                                container.ownerDocument.body.contains(container) &&
+                                !isScriptBeingDestroyed()
+                            ) {
                                 // Will re-render with the full config options stored in the zoid props
                                 const { render, state, updateProps, clone } = messagesMap.get(container).clone();
 
@@ -259,14 +298,15 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
             payerId: {
                 type: 'string',
                 queryParam: 'payer_id',
-                decorate: ({ props }) => (!stringStartsWith(props.account, 'client-id:') ? props.account : ''),
+                decorate: ({ props }) => (!stringStartsWith(props.account, 'client-id:') ? props.account : null),
                 default: () => '',
                 required: false
             },
             clientId: {
                 type: 'string',
                 queryParam: 'client_id',
-                decorate: ({ props }) => (stringStartsWith(props.account, 'client-id:') ? props.account.slice(10) : ''),
+                decorate: ({ props }) =>
+                    stringStartsWith(props.account, 'client-id:') ? props.account.slice(10) : null,
                 default: () => '',
                 required: false
             },
@@ -275,17 +315,55 @@ export default getGlobalVariable('__paypal_credit_message__', () =>
                 queryParam: true,
                 sendToChild: false,
                 required: false,
-                value: getMeta
+                value: getMeta,
+                debug: ppDebug(`SDK Meta: ${getMeta()}`)
             },
             env: {
                 type: 'string',
                 queryParam: true,
-                value: getEnv
+                value: getEnv,
+                debug: ppDebug(`Environment: ${getEnv()}`)
             },
             version: {
                 type: 'string',
                 queryParam: true,
-                value: getLibraryVersion
+                value: getLibraryVersion,
+                debug: ppDebug(`Library Version: ${getLibraryVersion()}`)
+            },
+            deviceID: {
+                type: 'string',
+                queryParam: true,
+                value: getOrCreateStorageID,
+                debug: ppDebug(`Device ID: ${getOrCreateStorageID()}`)
+            },
+            sessionID: {
+                type: 'string',
+                queryParam: true,
+                value: getSessionID,
+                debug: ppDebug(`Session ID: ${getSessionID()}`)
+            },
+            scriptUID: {
+                type: 'string',
+                queryParam: true,
+                value: getCurrentScriptUID,
+                debug: ppDebug(`ScriptUID: ${getCurrentScriptUID()}`)
+            },
+            debug: {
+                type: 'boolean',
+                queryParam: 'pp_debug',
+                value: () => /(\?|&)pp_debug=true(&|$)/.test(window.location.search)
+            },
+            messageLocation: {
+                type: 'string',
+                queryParam: false,
+                value: () => window.location.href,
+                debug: ppDebug(`Message Location: ${window.location.href}`)
+            },
+            stageTag: {
+                type: 'string',
+                queryParam: true,
+                required: false,
+                value: getStageTag
             }
         }
     })

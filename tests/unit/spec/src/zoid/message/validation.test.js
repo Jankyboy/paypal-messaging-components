@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import validate from 'src/zoid/message/validation';
+import { localeOptions, currencyOptions } from '../../../../../../locales';
 
 console.warn = jest.fn();
 
@@ -153,17 +154,6 @@ describe('validate', () => {
             expect(console.warn).not.toHaveBeenCalled();
         }
 
-        [{ color: 'blue' }].forEach((invalidStyle, index) => {
-            const style = validate.style({ props: { style: invalidStyle } });
-
-            expect(style).toEqual(fallback);
-            expect(console.warn).toHaveBeenCalledTimes(index + 1);
-            expect(console.warn).toHaveBeenLastCalledWith(
-                expect.stringContaining('invalid_option_value'),
-                expect.objectContaining({ location: 'style.layout' })
-            );
-        });
-
         console.warn.mockClear();
 
         ['abc', null, 12345].forEach((invalidStyle, index) => {
@@ -179,7 +169,7 @@ describe('validate', () => {
     });
 
     test('validates currency', () => {
-        ['USD', 'EUR', 'GBP'].forEach(supportedCurrency => {
+        currencyOptions.forEach(supportedCurrency => {
             const currency = validate.currency({ props: { currency: supportedCurrency } });
 
             expect(currency).toEqual(supportedCurrency);
@@ -233,7 +223,7 @@ describe('validate', () => {
     });
 
     test('validates buyerCountry', () => {
-        ['US', 'DE', 'GB'].forEach(supportedBuyerCountry => {
+        localeOptions.forEach(supportedBuyerCountry => {
             const buyerCountry = validate.buyerCountry({ props: { buyerCountry: supportedBuyerCountry } });
 
             expect(buyerCountry).toEqual(supportedBuyerCountry);

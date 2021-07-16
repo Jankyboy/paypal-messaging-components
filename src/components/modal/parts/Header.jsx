@@ -6,10 +6,13 @@ import Icon from './Icon';
 
 const LOCALE = {
     LOGO: {
+        AU: 'logo',
         DE: 'logo-de',
         GB: 'logo',
+        FR: 'logo',
         US: 'logo',
-        'US-EZP': 'logo-ezp'
+        'US-EZP': 'logo-ezp',
+        'DE-GPL': 'logo'
     }
 };
 

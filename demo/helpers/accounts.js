@@ -14,14 +14,31 @@ const accounts = [
     'DEV0000000GPL',
     'DEV00000GPLNQ',
     'DEV000000GPLQ',
+    'DEVGPLNQRANGE'
 
     // DE
     // 'DEV0000000IAZ',
     // 'DEV0000000IAG',
     // 'DEV000000PQAG',
     // 'DEV000000PQAZ',
+    // 'DEV000DEPLEQZ',
+    // 'DEV000DEPLGTZ',
+    // 'DEV00DEPLQEQZ',
+    // 'DEV00DEPLQGTZ',
+    // 'DEV0XBDEPLEQZ',
+    // 'DEV0XBDEPLGTZ',
+    // 'DEVXBDEPLQEQZ',
+    // 'DEVXBDEPLQGTZ',
 
     // GB
     // 'DEV000000GBPL',
     // 'DEV00000GBPLQ',
+
+    // FR
+    // 'DEV000000FRPL',
+    // 'DEV00000FRPLQ'
+
+    // AU
+    // 'DEV000000AUPL',
+    // 'DEV00000AUPLQ'
 ];

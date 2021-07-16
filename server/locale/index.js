@@ -1,13 +1,19 @@
 import US from './US';
 import DE from './DE';
 import GB from './GB';
+import FR from './FR';
+import AU from './AU';
 
 const getLocaleSettings = (offerCountry, offerType) => {
     switch (offerCountry) {
         case 'DE':
-            return DE;
+            return DE(offerType);
         case 'GB':
             return GB;
+        case 'FR':
+            return FR;
+        case 'AU':
+            return AU;
         case 'US':
         default:
             return US(offerType);

@@ -2,6 +2,7 @@ const { getWebpackConfig } = require('grumbler-scripts/config/webpack.config');
 
 const devServerProxy = require('./utils/devServerProxy');
 const globals = require('./globals');
+const { localeOptions } = require('./locales');
 
 const FILE_NAME = 'sdk';
 const PROTOCOL = 'https';
@@ -16,8 +17,7 @@ module.exports = (env = {}) => {
                       messaging: './src/index.js'
                   },
                   filename: '[name].js',
-                  modulename: ['paypal', 'Messages'],
-                  libraryTarget: 'window',
+                  libraryTarget: false,
                   debug: true,
                   minify: false,
                   sourcemaps: true,
@@ -41,11 +41,12 @@ module.exports = (env = {}) => {
                       __PATH__: `/${FILE_NAME}.js`,
                       __NAMESPACE__: 'paypal',
                       __VERSION__: '1.0.55',
-                      __COMPONENTS__: ['messages']
+                      __COMPONENTS__: ['messages'],
+                      __PAYPAL_DOMAIN__: `${PROTOCOL}://${HOSTNAME}:${PORT}`,
+                      __PAYPAL_API_DOMAIN__: `${PROTOCOL}://${HOSTNAME}:${PORT}`
                   }
               });
 
-    LIBRARY_DEV_CONFIG.output.libraryExport = env.TARGET !== 'sdk' ? 'Messages' : '';
     LIBRARY_DEV_CONFIG.devServer = {
         contentBase: './demo',
         publicPath: '/',
@@ -86,7 +87,7 @@ module.exports = (env = {}) => {
         })
     });
 
-    COMPONENTS_DEV_CONFIG.entry = ['US', 'US-EZP', 'DE', 'GB'].reduce(
+    COMPONENTS_DEV_CONFIG.entry = [...localeOptions, 'US-EZP', 'DE-GPL'].reduce(
         (accumulator, locale) => ({
             ...accumulator,
             [`smart-credit-modal-${locale}`]: `./src/components/modal/content/${locale}/index.js`
@@ -113,18 +114,5 @@ module.exports = (env = {}) => {
         vars: globals(env)
     });
 
-    // TODO: Remove this after the ramp
-    const MODAL_DEV_CONFIG = getWebpackConfig({
-        entry: './src/old/modal/index.js',
-        libraryTarget: 'window',
-        modulename: 'crc',
-        debug: true,
-        minify: false,
-        sourcemaps: true,
-        filename: 'smart-credit-modal.js',
-        env: env.NODE_ENV,
-        vars: globals(env)
-    });
-
-    return [LIBRARY_DEV_CONFIG, COMPONENTS_DEV_CONFIG, RENDERING_DEV_CONFIG, MODAL_DEV_CONFIG];
+    return [LIBRARY_DEV_CONFIG, COMPONENTS_DEV_CONFIG, RENDERING_DEV_CONFIG];
 };

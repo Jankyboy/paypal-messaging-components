@@ -9,8 +9,6 @@ node_js:
     - '10'
 
 env:
-    global:
-        - DIRTY_SNAPSHOTS=0
     jobs:
         - TEST_PATH_PATTERN=none
 
@@ -31,7 +29,8 @@ before_script:
     - sleep 40
 
 script:
-    - npm run test:func -- --testPathPattern $TEST_PATH_PATTERN
+    # Keeps the build from timing out
+    - travis_wait 50 npm run test:func -- --testPathPattern $TEST_PATH_PATTERN
     - ./scripts/snapshot-tests/collect-diffs.sh
 
 after_script:
@@ -39,46 +38,58 @@ after_script:
 
 jobs:
     include:
-        - stage: basics
-          name: 'Lint, Unit and Functional Non-Snapshot Tests'
-          env: TEST_PATH_PATTERN=none
-          script:
-              - npm run lint
-              - npm run test
-              - npm run test:func:nosnaps
-
-        # Update snapshots are split into non-US, US modal, and US banner/custom so the CI doesn't time out
-        - stage: update_snapshots_non_US
-          env: TEST_PATH_PATTERN=spec/[^U][^S]/
+        # Update snapshots are split into non-US countries, US modal, and US banner/custom so the CI does not time out
+        - stage: update_snapshots_AU
+          env: TEST_PATH_PATTERN=spec/AU/
           if: branch = develop AND type != pull_request
           script:
-              - npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
-              - COMMIT_DETAIL="non-US" ./scripts/snapshot-tests/git-push.sh
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="AU snapshots" ./scripts/snapshot-tests/git-push.sh
+        - stage: update_snapshots_DE
+          env: TEST_PATH_PATTERN=spec/DE/
+          if: branch = develop AND type != pull_request
+          script:
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="DE snapshots" ./scripts/snapshot-tests/git-push.sh
+        - stage: update_snapshots_FR
+          env: TEST_PATH_PATTERN=spec/FR/
+          if: branch = develop AND type != pull_request
+          script:
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="FR snapshots" ./scripts/snapshot-tests/git-push.sh
+        - stage: update_snapshots_GB
+          env: TEST_PATH_PATTERN=spec/GB/
+          if: branch = develop AND type != pull_request
+          script:
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="GB snapshots" ./scripts/snapshot-tests/git-push.sh
         - stage: update_snapshots_US_banner_and_custom
           env: TEST_PATH_PATTERN=spec/US/[bc]
           if: branch = develop AND type != pull_request
           script:
-              - npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
-              - COMMIT_DETAIL="US banner and custom" ./scripts/snapshot-tests/git-push.sh
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="US banner and custom snapshots" ./scripts/snapshot-tests/git-push.sh
         - stage: update_snapshots_US_modal
           env: TEST_PATH_PATTERN=spec/US/modal
           if: branch = develop AND type != pull_request
           script:
-              - npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
-              - sed -i -e 's/DIRTY_SNAPSHOTS=0/DIRTY_SNAPSHOTS=0/g' .travis.yml
-              - COMMIT_DETAIL="US modal" ./scripts/snapshot-tests/git-push.sh
+              - travis_wait 50 npm run test:func:ciupdate -- --testPathPattern $TEST_PATH_PATTERN
+              - COMMIT_DETAIL="US modal snapshots" ./scripts/snapshot-tests/git-push.sh
 
         # Stage is propagated through each job below it.
         # Jobs are ordered by time taken (which roughly corresponds to number of tests) in order to take advantage of parallelization
-        # US Banner tests are split further due to the number of offer types that exist for it
+        # To skip a test suite for a locale, comment out the line(s) below
         - stage: functional
-          env: TEST_PATH_PATTERN=spec/US/modal
-        - env: TEST_PATH_PATTERN=spec/DE/modal
-        - env: TEST_PATH_PATTERN=spec/US/banner/text
+          env: TEST_PATH_PATTERN=spec/US/banner/text
         - env: TEST_PATH_PATTERN=spec/US/banner/flex
+        - env: TEST_PATH_PATTERN=spec/GB
+        - env: TEST_PATH_PATTERN=spec/FR
+        - env: TEST_PATH_PATTERN=spec/AU
+        - env: TEST_PATH_PATTERN=spec/US/modal/calc
+        - env: TEST_PATH_PATTERN=spec/DE/modal/calc
+        - env: TEST_PATH_PATTERN=spec/US/modal/base
+        - env: TEST_PATH_PATTERN=spec/DE/modal/base
         - env: TEST_PATH_PATTERN=spec/DE/banner
-        - env: TEST_PATH_PATTERN=spec/GB/banner
-        - env: TEST_PATH_PATTERN=spec/GB/modal
         - env: TEST_PATH_PATTERN=spec/US/custom
 
         - stage: deploy
@@ -93,25 +104,27 @@ jobs:
           deploy:
               provider: script
               skip_cleanup: true
-              # Unclear if these are redundant or not
-              before_script:
-                  - true
               script: npx semantic-release@15
-              after_script:
-                  - true
               on:
                   branch: release
 
+# Due to a parsing issue with Travis, this inverse character selection regex must be used
+# It looks for snapshots surrounded by anything that is not alphanumeric, a space, a dash, or an underscore
 stages:
-    - name: basics
-    - name: update_snapshots_non_US
-      if: env(DIRTY_SNAPSHOTS) = 1
+    - name: update_snapshots_AU
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
+    - name: update_snapshots_DE
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
+    - name: update_snapshots_FR
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
+    - name: update_snapshots_GB
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
     - name: update_snapshots_US_banner_and_custom
-      if: env(DIRTY_SNAPSHOTS) = 1
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
     - name: update_snapshots_US_modal
-      if: env(DIRTY_SNAPSHOTS) = 1
+      if: commit_message =~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
     - name: functional
-      if: env(DIRTY_SNAPSHOTS) = 0
+      if: commit_message !~ /[^-_a-zA-Z0-9 ]snapshots[^-_a-zA-Z0-9 ]/
     - name: deploy
       # Prevent deploy stage from being listed in UI except on release branch
       if: branch = release

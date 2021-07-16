@@ -1,5 +1,6 @@
 {
     "meta": {
+        "id": "5e4c2c5e-8e9e-473b-ba53-9837243cd24b",
         "offerCountry": "DE",
         "offerType": "PALAQ:ANY:EQZ",
         "offerTerm": "${CREDIT_OFFERS_DS.total_payments}",

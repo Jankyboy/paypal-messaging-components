@@ -1,5 +1,6 @@
 {
     "meta": {
+        "id": "cc5f94fd-40a0-441a-b457-838e015c0404",
         "offerCountry": "US",
         "offerType": "PALA:SINGLE:EQZ",
         "offerTerm": "${CREDIT_OFFERS_DS.total_payments}",
@@ -12,24 +13,21 @@
             "formattedTotalCost": "${CREDIT_OFFERS_DS.formattedTotalCost}"
         }
     },
-
     "headline": [
         [
-            [["Make {total_payments} payments of", "weak"], "{formattedMonthlyPayment}/mo. at 0% APR."],
+            [["Make {total_payments} payments of", "weak"], "{formattedMonthlyPayment}/mo.", ["at 0% APR.", "weakest"]],
             ["default", "small"]
         ],
         ["Enjoy Easy Payments.", ["legacy-xsmall"]],
         ["Enjoy Easy Payments with No Interest.", ["legacy-small"]],
         ["Enjoy No Interest when you choose PayPal Credit.", ["legacy-small.2"]]
     ],
-
     "subHeadline": [
         [
             "Make {total_payments} Easy Payments as low as {formattedMonthlyPayment}/month with no interest for est. total pymts of {formattedTotalCost}.",
             ["legacy-xlarge"]
         ]
     ],
-
     "disclaimer": [
         ["Learn more", ["default", "xsmall"]],
         [["Minimum purchase required. Subject to credit approval.", ["Learn more", "em"]], ["legacy-medium"]],

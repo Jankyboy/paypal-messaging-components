@@ -10,7 +10,7 @@ describe('US > custom', () => {
 
     // Logitech banner
     runBannerTest(viewport, {
-        account: '6QXSKQZUKASMW',
+        account: 'DEV0000000EAZ',
         style: {
             layout: 'custom',
             markup: 'https://www.paypalobjects.com/upstream/assets/custom/6QXSKQZUKASMW-1.html'
@@ -19,10 +19,19 @@ describe('US > custom', () => {
 
     // Phoenix Suns banner
     runBannerTest(viewport, {
-        account: 'S3STW9PF9H6MW',
+        account: 'DEV00000000NI',
         style: {
             layout: 'custom',
             markup: 'https://www.paypalobjects.com/upstream/assets/custom/S3STW9PF9H6MW-1.html'
+        }
+    });
+
+    // BBB banner
+    runBannerTest(viewport, {
+        account: 'DEV0000000GPL',
+        style: {
+            layout: 'custom',
+            markup: 'https://www.paypalobjects.com/upstream/assets/custom/LZ25HUZDSKSPN-2.html'
         }
     });
 });

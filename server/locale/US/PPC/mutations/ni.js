@@ -3,7 +3,8 @@ import {
     basicMediaQuery,
     altContentMediaQuery,
     primaryContentMediaQuery,
-    messageDisclaimerMediaQuery
+    messageDisclaimerMediaQuery,
+    textWrap
 } from './mediaQueries';
 import { textLogoMutations, flexLogoMutations } from './common';
 
@@ -59,7 +60,7 @@ export default {
         [
             'logo.type:primary',
             ({ textSize }) => ({
-                messageWidth: [textSize * 13, textSize * 33],
+                messageWidth: [textSize * 13, textSize * 34],
                 styles: [
                     basicMediaQuery(textSize * 17),
                     `
@@ -138,7 +139,11 @@ export default {
         [
             'logo.type:alternative',
             ({ textSize }) => ({
-                styles: [basicMediaQuery(textSize * 18), `.message__logo-container { width: ${textSize * 5}px }`],
+                styles: [
+                    basicMediaQuery(textSize * 18),
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 39, textSize, 'US')
+                ],
                 logo: Logo.SINGLE_LINE_NO_PAYPAL.COLOR
             })
         ],
@@ -148,7 +153,8 @@ export default {
                 styles: [
                     basicMediaQuery(textSize * 18),
                     altContentMediaQuery(textSize * 42),
-                    `.message__logo-container { width: ${textSize * 5}px }`
+                    `.message__logo-container { width: ${textSize * 5}px }`,
+                    textWrap(textSize * 39, textSize, 'US')
                 ],
                 logo: Logo.SINGLE_LINE_NO_PAYPAL.COLOR
             })

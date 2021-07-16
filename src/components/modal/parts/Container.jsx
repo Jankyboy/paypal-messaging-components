@@ -2,13 +2,14 @@
 import stringStartsWith from 'core-js-pure/stable/string/starts-with';
 import { h } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
+import { getOrCreateStorageID } from '../../../utils';
 
 import { useTransitionState, ScrollProvider, useServerData, useXProps, useDidUpdateEffect, getContent } from '../lib';
 import Overlay from './Overlay';
 
 const Container = ({ children, contentWrapper, contentMaxWidth, contentMaxHeight }) => {
-    const { type, products, setServerData } = useServerData();
-    const { onReady, currency, amount, payerId, clientId, merchantId, buyerCountry } = useXProps();
+    const { type, products, meta, setServerData } = useServerData();
+    const { onReady, currency, amount, payerId, clientId, merchantId, buyerCountry, version, env } = useXProps();
     const [transitionState] = useTransitionState();
     const [loading, setLoading] = useState(false);
 
@@ -23,19 +24,26 @@ const Container = ({ children, contentWrapper, contentMaxWidth, contentMaxHeight
 
     useEffect(() => {
         if (typeof onReady === 'function') {
-            onReady({ type, products: products.map(({ meta }) => meta.product) });
+            onReady({
+                type,
+                products: products.map(({ meta: productMeta }) => productMeta.product),
+                meta,
+                deviceID: getOrCreateStorageID()
+            });
         }
-    }, []);
+    }, [meta.messageRequestId]);
 
     useDidUpdateEffect(() => {
         setLoading(true);
         getContent({
             currency,
-            amount,
+            amount: amount === '' ? undefined : amount,
             payerId,
             clientId,
             merchantId,
-            buyerCountry
+            buyerCountry,
+            version,
+            env
         }).then(data => {
             setServerData(data);
             setLoading(false);

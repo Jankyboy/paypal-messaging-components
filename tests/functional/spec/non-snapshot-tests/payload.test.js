@@ -1,11 +1,12 @@
 import packageConfig from '../../../../package.json';
 import { bannerStyles } from '../utils/testStylesConfig';
 import selectors from '../utils/selectors';
+import setupTestPage from '../utils/setupTestPage';
 
 const EVENT_TYPES = ['MORS', 'click', 'hover', 'modal-close', 'modal-render', 'modal-open', 'stats', 'scroll'];
 
 const createSpy = async () => {
-    const spy = { matchingStats: [] };
+    const spy = { matchingStats: [], meta: {} };
     page.on('request', request => {
         const url = request.url();
         const postDataString = request.postData();
@@ -15,27 +16,12 @@ const createSpy = async () => {
             // eslint-disable-next-line camelcase
             const hasEvent = postData.tracking?.filter(({ event_type }) => EVENT_TYPES.includes(event_type));
             if (hasEvent) {
+                spy.meta = { ...spy.meta, ...postData.meta };
                 spy.matchingStats = spy.matchingStats.concat(postData.tracking);
             }
         }
     });
     return spy;
-};
-
-const setupPage = async ({ config, testPage }) => {
-    await page.goto(`https://localhost.paypal.com:8080/snapshot/${testPage}?config=${JSON.stringify(config)}`);
-    await page.waitForSelector(selectors.banner.iframeByAttribute, { visible: true });
-    await page.waitForSelector(selectors.modal.iframe);
-
-    const bannerElement = await page.$(selectors.banner.iframeByAttribute);
-    const modalElement = await page.$(selectors.modal.iframe);
-    const bannerFrame = await bannerElement.contentFrame();
-    const modalFrame = await modalElement.contentFrame();
-
-    await modalFrame.waitForSelector(selectors.modal.contentBody);
-    await bannerFrame.waitForSelector(selectors.banner.messageMessaging, { visible: true });
-
-    return { bannerFrame, modalFrame };
 };
 
 const clickBanner = async bannerFrame => {
@@ -44,7 +30,15 @@ const clickBanner = async bannerFrame => {
     await page.waitFor(5 * 1000);
 };
 
-const runTest = async ({ testName, testPage = 'banner.html', statName, config, callback, matchObjects }) => {
+const runTest = async ({
+    testName,
+    testPage = 'banner.html',
+    statName,
+    config,
+    callback,
+    matchObjects = [],
+    matchMeta = []
+}) => {
     // eslint-disable-next-line no-console
     console.log(`Running test [${testName}]`);
     page.on('pageerror', error => {
@@ -53,14 +47,14 @@ const runTest = async ({ testName, testPage = 'banner.html', statName, config, c
     });
 
     const payloadSpy = await createSpy();
-    const { bannerFrame, modalFrame } = await setupPage({ config, testPage });
+    const { bannerFrame, modalFrame } = await setupTestPage({ config, testPage });
 
     await page.waitFor(5 * 1000);
     if (callback) await callback({ bannerFrame, modalFrame });
     await page.waitFor(15 * 1000);
 
-    const { matchingStats } = payloadSpy;
-    [].concat(matchObjects).forEach(matchObject => {
+    const { matchingStats, meta } = payloadSpy;
+    matchObjects.forEach(matchObject => {
         // eslint-disable-next-line camelcase
         const { link, event_type } = matchObject;
         const matchingStat = matchingStats.find(stat =>
@@ -76,6 +70,20 @@ const runTest = async ({ testName, testPage = 'banner.html', statName, config, c
         expect(matchingStat).toBeDefined();
         expect(matchingStat).toMatchObject(matchObject);
     });
+
+    matchMeta.forEach(matchObject => {
+        const { type } = matchObject;
+
+        const matchingMeta = Object.values(meta).find(metaEntry => metaEntry.type === type);
+
+        if (!matchingMeta) {
+            // eslint-disable-next-line no-console
+            console.error(`[${statName || testName}] meta not found, sent meta:`, meta);
+        }
+
+        expect(matchingMeta).toBeDefined();
+        expect(matchingMeta).toMatchObject(matchObject);
+    });
 };
 
 describe('payload testing', () => {
@@ -89,13 +97,24 @@ describe('payload testing', () => {
         await runTest({
             testName: 'initial payload',
             config,
+            matchMeta: [
+                {
+                    type: 'message',
+                    messageRequestId: expect.any(String),
+                    account: config.account
+                },
+                {
+                    type: 'modal',
+                    messageRequestId: expect.any(String),
+                    account: config.account
+                },
+                { integration_type: 'STANDALONE', messaging_version: packageConfig.version }
+            ],
             matchObjects: [
                 {
                     index: expect.any(String),
                     et: 'CLIENT_IMPRESSION',
                     event_type: 'stats',
-                    integration_type: 'STANDALONE',
-                    messaging_version: packageConfig.version,
                     pos_x: '0',
                     pos_y: '0',
                     browser_width: '800',
@@ -103,12 +122,24 @@ describe('payload testing', () => {
                     visible: 'true',
                     active_tags: expect.any(String),
                     adblock: 'false',
-                    blocked: 'false'
+                    blocked: 'false',
+                    first_render_delay: expect.stringNumber(),
+                    timestamp: expect.any(Number)
                 },
                 {
                     index: expect.any(String),
                     event_type: 'modal-render',
-                    modal: expect.stringMatching(/(NI)|(EZP)|(INST)/i)
+                    modal: expect.stringMatching(/(NI)|(EZP)|(INST)/i),
+                    first_modal_render_delay: expect.stringNumber(),
+                    timestamp: expect.any(Number)
+                },
+                {
+                    et: 'CLIENT_IMPRESSION',
+                    event_type: 'page_loaded',
+                    script_load_delay: expect.stringNumber(),
+                    dom_load_delay: expect.stringNumber(),
+                    page_load_delay: expect.stringNumber(),
+                    timestamp: expect.any(Number)
                 }
             ]
         });
@@ -124,12 +155,14 @@ describe('payload testing', () => {
                 await page.evaluate(() => window.scrollBy(0, 1000));
                 await page.waitFor(5 * 1000);
             },
-            matchObjects: {
-                index: expect.any(String),
-                et: 'CLIENT_IMPRESSION',
-                event_type: 'scroll',
-                visible: 'true'
-            }
+            matchObjects: [
+                {
+                    index: expect.any(String),
+                    et: 'CLIENT_IMPRESSION',
+                    event_type: 'scroll',
+                    visible: 'true'
+                }
+            ]
         });
     });
 
@@ -163,11 +196,13 @@ describe('payload testing', () => {
             callback: async ({ bannerFrame }) => {
                 await bannerFrame.hover('.message__messaging');
             },
-            matchObjects: {
-                index: expect.any(String),
-                et: 'CLIENT_IMPRESSION',
-                event_type: 'hover'
-            }
+            matchObjects: [
+                {
+                    index: expect.any(String),
+                    et: 'CLIENT_IMPRESSION',
+                    event_type: 'hover'
+                }
+            ]
         });
     });
 
@@ -185,13 +220,15 @@ describe('payload testing', () => {
                 // https://localhost.paypal.com:8080/smart-credit-common.js
                 await modalFrame.click(selectors.button.btnSecondary);
             },
-            matchObjects: {
-                index: expect.any(String),
-                et: 'CLICK',
-                event_type: 'click',
-                link: 'Calculator',
-                amount: expect.any(String)
-            }
+            matchObjects: [
+                {
+                    index: expect.any(String),
+                    et: 'CLICK',
+                    event_type: 'click',
+                    link: 'Calculator',
+                    amount: expect.any(String)
+                }
+            ]
         });
     });
 
@@ -203,12 +240,14 @@ describe('payload testing', () => {
                 await clickBanner(bannerFrame);
                 await modalFrame.click(selectors.button.contentHeader);
             },
-            matchObjects: {
-                index: expect.any(String),
-                et: 'CLICK',
-                event_type: 'click',
-                link: 'Apply Now'
-            }
+            matchObjects: [
+                {
+                    index: expect.any(String),
+                    et: 'CLICK',
+                    event_type: 'click',
+                    link: 'Apply Now'
+                }
+            ]
         });
     });
 
@@ -220,12 +259,14 @@ describe('payload testing', () => {
                 await clickBanner(bannerFrame);
                 await modalFrame.click(selectors.button.closeBtn);
             },
-            matchObjects: {
-                index: expect.any(String),
-                et: 'CLICK',
-                event_type: 'modal-close',
-                link: 'Close Button'
-            }
+            matchObjects: [
+                {
+                    index: expect.any(String),
+                    et: 'CLICK',
+                    event_type: 'modal-close',
+                    link: 'Close Button'
+                }
+            ]
         });
     });
 });

@@ -1,14 +1,26 @@
-import { ZalgoPromise } from 'zalgo-promise';
+import arrayFind from 'core-js-pure/stable/array/find';
+import { ZalgoPromise } from 'zalgo-promise/src';
 
-import { logger, memoizeOnProps, getCurrentTime, viewportHijack, awaitWindowLoad } from '../../utils';
-import { Modal } from '../../zoid/modal';
+import {
+    logger,
+    memoizeOnProps,
+    getCurrentTime,
+    awaitWindowLoad,
+    getInlineOptions,
+    isElement,
+    getGlobalState,
+    objectMerge,
+    getProductForOffer,
+    addPerformanceMeasure,
+    globalEvent
+} from '../../utils';
+import { getModalComponent } from '../../zoid/modal';
 
-export default memoizeOnProps(
-    ({ account, merchantId, currency, amount, buyerCountry, offer, onReady, onCalculate, onApply, onClose, index }) => {
-        const [hijackViewport] = viewportHijack();
+const memoizedModal = memoizeOnProps(
+    ({ account, merchantId, currency, amount, buyerCountry, offer, onReady, onCalculate, onApply, onClose }) => {
+        addPerformanceMeasure('firstModalRenderDelay');
 
-        const { render, hide, updateProps, state } = Modal({
-            index,
+        const { render, hide, updateProps, state, event } = getModalComponent()({
             account,
             merchantId,
             currency,
@@ -20,6 +32,8 @@ export default memoizeOnProps(
             onApply,
             onClose
         });
+        // Fired from inside the default onReady callback
+        const modalReady = new ZalgoPromise(resolve => event.once('ready', resolve));
 
         let renderProm;
         const renderModal = (selector = 'body') => {
@@ -29,30 +43,48 @@ export default memoizeOnProps(
                 renderProm = awaitWindowLoad
                     // Give priority to other merchant scripts waiting for the load event
                     .then(() => ZalgoPromise.delay(0))
-                    .then(() => render(selector))
-                    // The render promise will resolve before Preact renders and picks up changes
-                    // via updateProps so a small delay is added after the initial "render" promise
-                    .then(() => ZalgoPromise.delay(100));
+                    .then(() => ZalgoPromise.all([render(selector), modalReady]))
+                    .then(() => globalEvent.trigger('modal-render'));
+
                 hide();
             }
 
             return renderProm;
         };
 
-        const showModal = (newOptions = {}) => {
+        const showModal = (options = {}) => {
+            const newOptions = isElement(options) ? getInlineOptions(options) : options;
+
+            if (isElement(options)) {
+                newOptions.src =
+                    options.id ??
+                    [...options.classList]
+                        .filter(Boolean)
+                        .reduce((acc, className) => `${acc ?? ''}.${className}`, null) ??
+                    options.constructor?.name ??
+                    'element';
+            }
             state.renderStart = getCurrentTime();
+
             if (!renderProm) {
                 renderProm = renderModal('body');
             }
-            return renderProm.then(() => {
-                hijackViewport();
 
-                logger.track({
-                    index: newOptions.index,
-                    et: 'CLIENT_IMPRESSION',
-                    event_type: 'modal-open'
+            const requestedProduct = getProductForOffer(options.offer);
+
+            if (
+                typeof options.offer !== 'undefined' &&
+                Array.isArray(state.products) &&
+                !arrayFind(state.products, supportedProduct => supportedProduct === requestedProduct)
+            ) {
+                logger.warn('invalid_option_value', {
+                    location: 'offer',
+                    description: `Expected one of ["${state.products.join('", "')}"] but received "${options.offer}".`
                 });
+                return ZalgoPromise.resolve();
+            }
 
+            return renderProm.then(() => {
                 return updateProps({
                     visible: true,
                     ...newOptions
@@ -64,8 +96,14 @@ export default memoizeOnProps(
             if (!renderProm) {
                 renderProm = renderModal('body');
             }
+
             return renderProm.then(() => updateProps({ visible: false }));
         };
+
+        // Expose these functions through the computed onReady callback
+        // for merchant integrations
+        state.show = showModal;
+        state.hide = hideModal;
 
         // Follow existing zoid interface
         return {
@@ -77,3 +115,5 @@ export default memoizeOnProps(
     },
     ['account', 'merchantId']
 );
+
+export default options => memoizedModal(objectMerge(getGlobalState().config, options));
